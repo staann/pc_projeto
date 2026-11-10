@@ -1,35 +1,24 @@
-% ===========================================================
-%  Programacao Concorrente -- Trabalho 1 -- Versao 2.0
-%  Relatorio: Produtor-Consumidor com Buffer Limitado
-%             e Logger Assincrono com Semaforos POSIX
-% ===========================================================
-\documentclass[12pt, a4paper]{article}
+\documentclass[11pt, a4paper]{article}
 
-% ---- Pacotes disponiveis no texlive-latex-base ----
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{lmodern}
 \usepackage{geometry}
-\usepackage{graphicx}
 \usepackage{amsmath}
-\usepackage{amssymb}
+\usepackage{tabularx}
+\usepackage{multicol}
 \usepackage{hyperref}
 \usepackage{indentfirst}
-\usepackage{array}
-\usepackage{tabularx}
-\usepackage{url}
 
-% ---- Margens ----
 \geometry{
-    top    = 3cm,
-    bottom = 2cm,
-    left   = 3cm,
-    right  = 2cm
+    top    = 1.8cm,
+    bottom = 1.8cm,
+    left   = 2.0cm,
+    right  = 2.0cm
 }
 
-% ---- Espacamento 1.5 manual ----
-\renewcommand{\baselinestretch}{1.5}
+\renewcommand{\baselinestretch}{1.15}
 
-% ---- Hyperlinks ----
 \hypersetup{
     colorlinks = true,
     linkcolor  = black,
@@ -37,644 +26,127 @@
     urlcolor   = blue
 }
 
-% ---- Traducoes manuais (sem babel) ----
-\renewcommand{\contentsname}{Sumário}
-\renewcommand{\refname}{Referências}
-\renewcommand{\appendixname}{Apêndice}
-\renewcommand{\figurename}{Figura}
-\renewcommand{\tablename}{Tabela}
-
-% ===========================
-%  Inicio do documento
-% ===========================
 \begin{document}
-\pagenumbering{gobble}
 
-% ---- CAPA ----
-\begin{titlepage}
+% ---- Cabeçalho ----
+\noindent
+\begin{minipage}{\textwidth}
     \centering
-    \vspace*{1cm}
+    {\large \textbf{Universidade de Brasília -- UnB}}\\[1pt]
+    {\normalsize Departamento de Ciência da Computação \ \textbar\ \ Programação Concorrente}\\[2pt]
+    \vspace{0.15cm}
+    {\Large \textbf{Relatório Técnico: Produtor-Consumidor com Buffer Limitado}}\\[2pt]
+    {\large Comunicação em Memória Compartilhada e Logger Assíncrono com POSIX Pthreads}\\[3pt]
+    {\textbf{Aluno:} Gustavo Choueiri \qquad \textbf{Data:} Novembro de 2026}
+\end{minipage}
 
-    {\large \textbf{Universidade} \par}
-    \vspace{0.3cm}
-    {\large Departamento de Ci\^encia da Computa\c{c}\~ao \par}
-    \vspace{0.3cm}
-    {\large Programa\c{c}\~ao Concorrente \par}
+\vspace{-0.2cm}
+\noindent\rule{\textwidth}{0.6pt}
+\vspace{-0.2cm}
 
-    \vspace{3cm}
+% ===========================================================
+\section{Descrição do Problema e Condições de Corrida}
+% ===========================================================
 
-    {\Huge \textbf{Trabalho 1 --- Vers\~ao 2.0} \par}
-    \vspace{0.5cm}
-    {\LARGE Logger Ass\'\i{}ncrono com Sem\'aforos POSIX \par}
-    \vspace{0.5cm}
-    {\Large Produtor-Consumidor com Buffer Limitado e Logger Ass\'\i{}ncrono \par}
+O objetivo deste trabalho é solucionar o problema clássico de comunicação e sincronização de processos através de uma região de memória compartilhada, eliminando condições de corrida por meio das primitivas da biblioteca POSIX Pthreads (\texttt{pthread\_mutex\_t}, \texttt{pthread\_cond\_t} e \texttt{sem\_t}).
 
-    \vspace{3cm}
-
-    {\large \textbf{Aluno:} Gustavo Choueiri \par}
-    \vspace{0.5cm}
-    {\large \textbf{Data:} Novembro de 2026 \par}
-
-    \vfill
-
-    {\large Relat\'orio apresentado como requisito parcial da disciplina
-    de Programa\c{c}\~ao Concorrente. \par}
-\end{titlepage}
-
-% ---- Sumario ----
-\tableofcontents
-\newpage
-
-% ===========================
-%  1. INTRODUCAO
-% ===========================
-\pagenumbering{arabic}
-\section{Introdução}
-
-A programação concorrente é um paradigma fundamental na computação moderna,
-presente desde sistemas embarcados de baixo nível até servidores de alta escala
-na nuvem. A capacidade de executar múltiplas tarefas simultaneamente aumenta
-significativamente o desempenho de aplicações; contudo, introduz uma classe de
-desafios delicada: a \textbf{sincronização entre processos e threads} que
-compartilham recursos na memória.
-
-Quando múltiplas threads acessam e modificam uma estrutura de dados compartilhada
-sem nenhum mecanismo de controle, surgem as chamadas \textbf{condições de corrida}
-(\textit{race conditions}). Uma condição de corrida ocorre quando o resultado
-correto de um programa depende da ordem de execução relativa entre as threads,
-tornando o comportamento da aplicação não determinístico, difícil de depurar e
-potencialmente catastrófico em sistemas críticos \cite{tanenbaum}.
-
-Para tratar esse problema, a biblioteca padrão POSIX define a interface
-\texttt{Pthreads} (\textit{POSIX Threads}), que fornece primitivas robustas de
-sincronização: \textbf{mutexes} (\textit{mutual exclusion locks}),
-\textbf{variáveis de condição} e \textbf{semáforos POSIX} (\texttt{sem\_t}).
-Essas primitivas permitem que o programador delimite regiões críticas do código,
-garantindo exclusão mútua e comunicação segura entre threads \cite{kerrisk}.
-
-O presente trabalho, em sua \textbf{Versão 2.0}, expande a solução original do
-Problema Produtor-Consumidor com duas contribuições principais: (1)~a
-\textbf{refatoração do código em múltiplos módulos} (\texttt{.h}/\texttt{.c}),
-com responsabilidades claramente separadas; e (2)~a adição de uma
-\textbf{camada de logger assíncrono} sincronizada exclusivamente com
-\textbf{semáforos POSIX} (\texttt{sem\_t}), demonstrando essa primitiva em
-paralelo com o mutex e as variáveis de condição já utilizados no buffer principal.
-O relatório está organizado da seguinte forma: a
-Seção~\ref{sec:formalizacao} formaliza o problema proposto; a
-Seção~\ref{sec:algoritmo} descreve o algoritmo e a nova arquitetura; e
-a Seção~\ref{sec:conclusao} apresenta as considerações finais.
-
-% ===========================
-%  2. FORMALIZACAO DO PROBLEMA
-% ===========================
-\section{Formalização do Problema Proposto}
-\label{sec:formalizacao}
-
-\subsection{Definição}
-
-O \textbf{Problema Produtor-Consumidor com Buffer Limitado}
-(também denominado \textit{Bounded-Buffer Problem}) é um dos problemas de
-sincronização mais estudados na literatura \cite{dijkstra}. Ele modela
-situações reais em que componentes de um sistema produzem dados em taxas
-distintas de seu consumo, como \textit{pipelines} de processamento, filas de
-mensagens e \textit{spoolers} de impressão.
-
-Formalmente, o problema é definido por um conjunto de entidades e restrições:
-
-\begin{itemize}
-    \item \textbf{Buffer compartilhado:} uma estrutura circular de capacidade
-          $N$ posições, acessível por todas as threads.
-    \item \textbf{Threads Produtoras} ($P_1, P_2, \ldots, P_m$): cada uma
-          gera itens e os deposita no buffer.
-    \item \textbf{Threads Consumidoras} ($C_1, C_2, \ldots, C_k$): cada uma
-          retira itens do buffer e os processa.
-    \item \textbf{Restrição de capacidade:} o número de itens no buffer a
-          qualquer instante $t$ satisfaz $0 \leq |B(t)| \leq N$.
+O cenário implementado consiste em um \textbf{buffer circular limitado} de capacidade $N = 5$ posições de números inteiros, acessado simultaneamente por:
+\begin{itemize}\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}
+    \item \textbf{3 Threads Produtoras:} geram itens sequenciais e os depositam no buffer compartilhado.
+    \item \textbf{3 Threads Consumidoras:} retiram itens do buffer e simulam o seu processamento.
 \end{itemize}
 
-\subsection{Condições de Corrida Identificadas}
-
-Sem mecanismos de sincronização, as seguintes condições de corrida emergem:
-
-\begin{enumerate}
-    \item \textbf{Inserção concorrente:} dois produtores calculam simultaneamente
-          o índice de cauda (\texttt{cauda}) e sobrescrevem o mesmo slot do buffer,
-          perdendo um dos itens produzidos.
-
-    \item \textbf{Remoção concorrente:} dois consumidores leem simultaneamente o
-          mesmo item da cabeça (\texttt{cabeca}), processando o mesmo valor duas
-          vezes e pulando o próximo.
-
-    \item \textbf{Overflow:} um produtor insere um item quando o buffer está
-          cheio ($|B(t)| = N$), corrompendo um item ainda não consumido.
-
-    \item \textbf{Underflow:} um consumidor retira um item quando o buffer está
-          vazio ($|B(t)| = 0$), lendo um valor inválido da memória.
+Sem mecanismos de controle de concorrência, o sistema estaria sujeito a quatro condições de corrida críticas:
+\begin{enumerate}\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}
+    \item \textbf{Inserção concorrente:} dois produtores calculam o mesmo índice de cauda e gravam na mesma posição, corrompendo e perdendo valores.
+    \item \textbf{Remoção concorrente:} dois consumidores leem a mesma posição de cabeça, duplicando o consumo de um item e inconsistenciando a contagem.
+    \item \textbf{Buffer Overflow:} um produtor tenta inserir dados com o buffer lotado ($quantidade = N$).
+    \item \textbf{Buffer Underflow:} um consumidor tenta retirar dados com o buffer vazio ($quantidade = 0$).
 \end{enumerate}
 
-\subsection{Invariantes que a Solução deve Garantir}
+% ===========================================================
+\section{Solução Desenvolvida e Mecanismos de Sincronização}
+% ===========================================================
 
-A solução correta deve assegurar as seguintes propriedades:
+A solução foi organizada modularmente em arquivos C (módulos \texttt{buffer}, \texttt{produtor}, \texttt{consumidor}, \texttt{logger} e \texttt{main}), empregando as primitivas POSIX em duas frentes:
 
-\begin{center}
-\renewcommand{\baselinestretch}{1.2}\normalsize
-\begin{tabular}{|p{3.8cm}|p{9.5cm}|}
-\hline
-\textbf{Propriedade} & \textbf{Descrição} \\
-\hline
-Exclusão Mútua       & No máximo uma thread acessa o buffer por vez. \\
-\hline
-Ausência de Deadlock & O sistema sempre progride; nenhuma thread espera
-                       indefinidamente por recurso que nunca será liberado. \\
-\hline
-Ausência de Starvation & Todo produtor eventualmente insere seu item; todo
-                         consumidor eventualmente retira um item. \\
-\hline
-Consistência do Buffer & $0 \leq |B(t)| \leq N$ em qualquer instante. \\
-\hline
-\end{tabular}
-\renewcommand{\baselinestretch}{1.5}\normalsize
-\end{center}
+\subsection{Buffer Compartilhado (Mutex e Variáveis de Condição)}
+O acesso ao buffer central é protegido com:
+\begin{itemize}\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}
+    \item \texttt{pthread\_mutex\_t} (\texttt{mutex\_buffer}): assegura \textbf{exclusão mútua} estrita em operações de leitura, escrita e atualização de índices e contadores.
+    \item \texttt{pthread\_cond\_t} (\texttt{nao\_cheio}): bloqueia produtores se o buffer estiver cheio. O teste é feito via \texttt{while (quantidade == TAMANHO\_BUFFER)} para tratar despertares espúrios.
+    \item \texttt{pthread\_cond\_t} (\texttt{nao\_vazio}): suspende consumidores se o buffer estiver vazio (\texttt{quantidade == 0}).
+\end{itemize}
+Ao inserir um item, o produtor sinaliza \texttt{nao\_vazio}; ao retirar, o consumidor sinaliza \texttt{nao\_cheio}.
 
-% ===========================
-%  3. DESCRICAO DO ALGORITMO
-% ===========================
-\section{Descrição do Algoritmo Desenvolvido}
-\label{sec:algoritmo}
-
-\subsection{Arquitetura do Sistema Refatorado}
-
-A versão 2.0 adota uma arquitetura modular com responsabilidades bem separadas.
-O projeto é composto pelos seguintes arquivos:
-
-\begin{center}
-\renewcommand{\baselinestretch}{1.2}\normalsize
-\begin{tabular}{|p{3.6cm}|p{9.7cm}|}
-\hline
-\textbf{Arquivo} & \textbf{Responsabilidade} \\
-\hline
-\texttt{config.h}     & Constantes globais (\texttt{TAMANHO\_BUFFER}, \texttt{NUM\_PRODUTORES}, etc.) \\
-\hline
-\texttt{buffer.h/.c}  & Buffer circular + mutex + variáveis de condição \\
-\hline
-\texttt{logger.h/.c}  & Fila de log + semáforos POSIX + thread de log \\
-\hline
-\texttt{produtor.h/.c} & Lógica da thread produtora \\
-\hline
-\texttt{consumidor.h/.c} & Lógica da thread consumidora \\
-\hline
-\texttt{main.c}       & Inicialização, criação de threads e encerramento \\
-\hline
-\texttt{Makefile}     & Compilação de todos os módulos \\
-\hline
-\end{tabular}
-\renewcommand{\baselinestretch}{1.5}\normalsize
-\end{center}
-
-\subsection{Visão Geral da Arquitetura}
-
-A solução é composta por quatro camadas lógicas:
-
-\begin{itemize}
-    \item \textbf{Threads Produtoras} ($P_1, P_2, P_3$): geram itens e os
-          inserem no buffer compartilhado; delegam o log via \texttt{log\_evento()}.
-    \item \textbf{Buffer Circular Compartilhado} (5 posições): estrutura de dados
-          central protegida por mutex e variáveis de condição.
-    \item \textbf{Threads Consumidoras} ($C_1, C_2, C_3$): retiram e processam
-          os itens do buffer; delegam o log via \texttt{log\_evento()}.
-    \item \textbf{Thread de Logger Assíncrono}: consome eventos da fila de log
-          e os exibe com timestamp; sincronizada por semáforos POSIX.
+\subsection{Logger Assíncrono Desacoplado (Semáforos POSIX)}
+Para auditar as operações sem introduzir atrasos nas threads principais, implementou-se uma fila circular de logs independente sincronizada com \textbf{semáforos POSIX} (\texttt{sem\_t}):
+\begin{itemize}\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}
+    \item \texttt{sem\_espacos\_log}: semáforo contador iniciado em $20$ (capacidade da fila), controlando slots livres.
+    \item \texttt{sem\_itens\_log}: semáforo contador iniciado em $0$, representando mensagens pendentes de escrita.
+    \item \texttt{sem\_trywait()}: chamada \textbf{não-bloqueante} no envio de mensagens. Se a fila de logs estiver cheia, o evento é descartado sem jamais bloquear a execução dos produtores ou consumidores.
 \end{itemize}
 
-\subsection{Estruturas de Dados}
-
-O buffer compartilhado é implementado como um \textbf{vetor circular} de
-inteiros de tamanho fixo $N = 5$. Dois ponteiros — \texttt{cabeca} e
-\texttt{cauda} — percorrem o vetor de forma circular usando aritmética modular,
-evitando realocações dinâmicas. A variável \texttt{quantidade} mantém o número
-de itens presentes no buffer em qualquer instante:
-
+\vspace{-0.1cm}
 \begin{center}
-\texttt{cabeca = (cabeca + 1) \% TAMANHO\_BUFFER} \\
-\texttt{cauda  = (cauda  + 1) \% TAMANHO\_BUFFER}
+\small
+\begin{tabularx}{\linewidth}{|l|l|X|}
+\hline
+\textbf{Primitiva POSIX} & \textbf{Componente} & \textbf{Papel na Sincronização} \\
+\hline
+\texttt{pthread\_mutex\_t} & Buffer & Exclusão mútua nas regiões críticas de inserção e remoção. \\
+\hline
+\texttt{pthread\_cond\_t}  & Buffer & Bloqueio/sinalização de buffer cheio e vazio (\texttt{nao\_cheio}, \texttt{nao\_vazio}). \\
+\hline
+\texttt{sem\_t}            & Logger & Controle de fluxo produtor-consumidor da fila assíncrona de eventos. \\
+\hline
+\end{tabularx}
 \end{center}
+\vspace{-0.2cm}
 
-A fila de log é também um vetor circular separado de \texttt{EventoLog}
-com capacidade \texttt{TAMANHO\_FILA\_LOG = 20}.
+% ===========================================================
+\section{Resultados e Validação Experimental}
+% ===========================================================
 
-\subsection{Mecanismos de Sincronização}
+O programa foi compilado com \texttt{gcc -Wall -Wextra -pthread} via \texttt{Makefile} e executado com 3 produtores e 3 consumidores, totalizando 12 itens transacionados (4 por produtor). 
 
-A tabela a seguir resume os três mecanismos utilizados na versão 2.0:
-
-\begin{center}
-\renewcommand{\baselinestretch}{1.2}\normalsize
-\begin{tabular}{|p{4.0cm}|p{3.5cm}|p{5.8cm}|}
-\hline
-\textbf{Primitiva} & \textbf{Onde é usada} & \textbf{Finalidade} \\
-\hline
-\texttt{pthread\_mutex\_t} & Buffer principal & Exclusão mútua na região crítica de inserção/remoção \\
-\hline
-\texttt{pthread\_cond\_t} & Buffer principal & Bloquear produtores (buffer cheio) e consumidores (buffer vazio) \\
-\hline
-\texttt{sem\_t} (POSIX) & Fila de log & Controlar espaços livres e itens pendentes na fila de eventos \\
-\hline
-\end{tabular}
-\renewcommand{\baselinestretch}{1.5}\normalsize
-\end{center}
-
-\subsection{Protocolo da Thread Produtora}
-
-Cada thread produtora segue o protocolo abaixo:
-
-\begin{enumerate}
-    \item Simular tempo de produção (\texttt{usleep}).
-    \item Invocar \texttt{buffer\_inserir(id)}, que internamente:
-    \begin{enumerate}
-        \item Adquire o mutex (\texttt{pthread\_mutex\_lock}).
-        \item \textbf{Enquanto} o buffer estiver cheio, envia \texttt{LOG\_BUF\_CHEIO}
-              ao logger e aguarda na variável de condição \texttt{nao\_cheio}.
-        \item Insere o item no slot \texttt{cauda} e avança o ponteiro.
-        \item Incrementa \texttt{quantidade}.
-        \item Sinaliza a variável \texttt{nao\_vazio}.
-        \item Libera o mutex.
-        \item Envia evento \texttt{LOG\_PRODUZIU} ao logger assíncrono.
-    \end{enumerate}
-\end{enumerate}
-
-O uso do laço \texttt{while} ao invés de \texttt{if} na etapa 2b é essencial
-para lidar com \textit{spurious wakeups} — situação prevista pelo padrão POSIX
-em que a thread pode ser desbloqueada sem que a condição esperada tenha se
-tornado verdadeira \cite{kerrisk}.
-
-\subsection{Logger Assíncrono com Semáforos POSIX}
-
-O módulo de log (\texttt{logger.c}) implementa uma fila produtora-consumidora
-própria, onde \textit{produtores são as threads do sistema principal} e o
-\textit{único consumidor é a thread de log}. A sincronização usa
-\textbf{exclusivamente semáforos POSIX} (\texttt{sem\_t}):
-
-\begin{itemize}
-    \item \texttt{sem\_t sem\_espacos\_log}: semáforo contador inicializado com
-          \texttt{TAMANHO\_FILA\_LOG} (20). Representa espaços livres na fila.
-    \item \texttt{sem\_t sem\_itens\_log}: semáforo contador inicializado com 0.
-          Representa itens pendentes para exibição.
-    \item \texttt{pthread\_mutex\_t mutex\_log}: protege o índice circular da
-          fila de log durante leitura e escrita.
-\end{itemize}
-
-O fluxo de envio de um evento via \texttt{log\_evento()} é:
-
-\begin{enumerate}
-    \item Chama \texttt{sem\_trywait(\&sem\_espacos\_log)} --- não bloqueia.
-    \item Se retornar \texttt{EAGAIN} (fila cheia), descarta o evento silenciosamente.
-    \item Caso contrário, preenche o evento com timestamp e escreve na fila com proteção do \texttt{mutex\_log}.
-    \item Chama \texttt{sem\_post(\&sem\_itens\_log)} para sinalizar a thread de log.
-\end{enumerate}
-
-A thread de log executa em loop:
-
-\begin{enumerate}
-    \item \texttt{sem\_wait(\&sem\_itens\_log)} --- bloqueia enquanto fila vazia.
-    \item Adquire \texttt{mutex\_log}, lê o evento, libera o mutex.
-    \item \texttt{sem\_post(\&sem\_espacos\_log)} --- libera uma posição.
-    \item Exibe o evento formatado com timestamp em milissegundos.
-    \item Para ao receber evento sentinela \texttt{LOG\_SHUTDOWN}.
-\end{enumerate}
-
-O uso de \texttt{sem\_trywait} (não-bloqueante) no envio garante que
-produtores e consumidores \textbf{nunca bloqueiam} aguardando o logger,
-preservando o desempenho do sistema principal.
-
-\subsection{Protocolo da Thread Consumidora}
-
-A thread consumidora segue o protocolo simétrico ao produtor:
-
-\begin{enumerate}
-    \item Simular tempo de consumo (\texttt{usleep}).
-    \item Invocar \texttt{buffer\_retirar(id)}, que internamente:
-    \begin{enumerate}
-        \item Adquire o mutex.
-        \item \textbf{Enquanto} o buffer estiver vazio, envia \texttt{LOG\_BUF\_VAZIO}
-              e aguarda na variável \texttt{nao\_vazio}.
-        \item Lê o item no slot \texttt{cabeca} e avança o ponteiro.
-        \item Decrementa \texttt{quantidade}.
-        \item Sinaliza \texttt{nao\_cheio}.
-        \item Libera o mutex.
-        \item Envia evento \texttt{LOG\_CONSUMIU} ao logger assíncrono.
-    \end{enumerate}
-\end{enumerate}
-
-\subsection{Correção da Solução}
-
-A tabela a seguir mapeia cada propriedade de correção exigida ao mecanismo
-que a garante na implementação:
-
-\begin{center}
-\renewcommand{\baselinestretch}{1.2}\normalsize
-\begin{tabular}{|p{3.8cm}|p{9.5cm}|}
-\hline
-\textbf{Propriedade} & \textbf{Mecanismo} \\
-\hline
-Exclusão Mútua
-    & \texttt{pthread\_mutex\_lock/unlock} envolve toda a região crítica. \\
-\hline
-Ausência de Overflow
-    & Laço \texttt{while (quantidade == N)} bloqueia o produtor antes de inserir. \\
-\hline
-Ausência de Underflow
-    & Laço \texttt{while (quantidade == 0)} bloqueia o consumidor antes de retirar. \\
-\hline
-Ausência de Deadlock
-    & O mutex é liberado por \texttt{pthread\_cond\_wait} e os sinais
-      são emitidos após cada inserção/remoção. \\
-\hline
-Ausência de Starvation
-    & O escalonador POSIX garante progresso; \texttt{pthread\_cond\_signal}
-      acorda pelo menos uma thread em espera. \\
-\hline
-Log não-bloqueante
-    & \texttt{sem\_trywait} descarta eventos se a fila de log estiver cheia,
-      sem atrasar produtores nem consumidores. \\
-\hline
-\end{tabular}
-\renewcommand{\baselinestretch}{1.5}\normalsize
-\end{center}
-
-\subsection{Resultado da Execução}
-
-A execução do programa com 3 produtores, 3 consumidores e buffer de 5 posições
-produziu a saída abaixo, confirmando a completa sincronização e ausência de
-condições de corrida. O timestamp em milissegundos evidencia o caráter
-assíncrono do logger:
+A saída registrada pelo logger assíncrono comprova a corretude e a sincronização temporal:
 
 \begin{quote}
-{\ttfamily\small\renewcommand{\baselinestretch}{1.1}\normalsize
-=== Produtor-Consumidor v2.0 com Logger Assincrono ===\\
-Buffer: 5 posicoes | 3 produtores | 3 consumidores\\[2pt]
-{[}  158.6ms{]} {[}Produtor 3{]} Inseriu: 1 | Buffer: 1/5\\
-{[}  212.4ms{]} {[}Produtor 2{]} Inseriu: 2 | Buffer: 2/5\\
-{[}  241.5ms{]} {[}Produtor 1{]} Inseriu: 3 | Buffer: 3/5\\
-{[}  281.4ms{]} {[}Consumidor 3{]} Retirou: 1 | Buffer: 2/5\\
-{[}  366.4ms{]} {[}Consumidor 1{]} Retirou: 2 | Buffer: 1/5\\
-{[}  376.8ms{]} {[}Produtor 1{]} Inseriu: 4 | Buffer: 2/5\\
-{[}  379.8ms{]} {[}Produtor 3{]} Inseriu: 5 | Buffer: 3/5\\
-{[}  540.5ms{]} {[}Consumidor 2{]} Retirou: 3 | Buffer: 2/5\\
-{[}  552.5ms{]} {[}Produtor 2{]} Inseriu: 6 | Buffer: 3/5\\
-{[}  596.9ms{]} {[}Produtor 3{]} Inseriu: 7 | Buffer: 4/5\\
-{[}  620.0ms{]} {[}Produtor 1{]} Inseriu: 8 | Buffer: 5/5\\
-{[}  624.6ms{]} {[}Consumidor 3{]} Retirou: 4 | Buffer: 4/5\\
-{[}  748.7ms{]} {[}Produtor 2{]} Inseriu: 9 | Buffer: 5/5\\
-{[}  759.1ms{]} {[}Produtor 3{]} Buffer cheio. Aguardando...\\
-{[}  840.7ms{]} {[}Consumidor 1{]} Retirou: 5 | Buffer: 4/5\\
-{[}  840.8ms{]} {[}Produtor 3{]} Inseriu: 10 | Buffer: 5/5\\
-{[}  844.7ms{]} {[}Consumidor 2{]} Retirou: 6 | Buffer: 4/5\\
-{[} 1012.3ms{]} {[}Produtor 1{]} Inseriu: 11 | Buffer: 5/5\\
-{[} 1046.8ms{]} {[}Produtor 2{]} Buffer cheio. Aguardando...\\
-{[} 1072.7ms{]} {[}Consumidor 3{]} Retirou: 7 | Buffer: 4/5\\
-{[} 1072.8ms{]} {[}Produtor 2{]} Inseriu: 12 | Buffer: 5/5\\
-{[} 1099.9ms{]} {[}Consumidor 1{]} Retirou: 8 | Buffer: 4/5\\
-{[} 1312.1ms{]} {[}Consumidor 2{]} Retirou: 9 | Buffer: 3/5\\
-{[} 1509.1ms{]} {[}Consumidor 1{]} Retirou: 10 | Buffer: 2/5\\
-{[} 1625.0ms{]} {[}Consumidor 3{]} Retirou: 11 | Buffer: 1/5\\
-{[} 1745.4ms{]} {[}Consumidor 2{]} Retirou: 12 | Buffer: 0/5\\[2pt]
-=== Execucao concluida com sucesso! ===
-}
+\ttfamily\footnotesize\raggedright
+\setlength{\columnsep}{0.8cm}
+\begin{multicols}{2}
+\noindent
+{[}  158.6ms{]} {[}P3{]} Inseriu: 1 | Buf: 1/5\\
+{[}  212.4ms{]} {[}P2{]} Inseriu: 2 | Buf: 2/5\\
+{[}  241.5ms{]} {[}P1{]} Inseriu: 3 | Buf: 3/5\\
+{[}  281.4ms{]} {[}C3{]} Retirou: 1 | Buf: 2/5\\
+{[}  620.0ms{]} {[}P1{]} Inseriu: 8 | Buf: 5/5\\
+{[}  759.1ms{]} {[}P3{]} Cheio. Aguarda...\\
+\columnbreak
+{[}  840.7ms{]} {[}C1{]} Retirou: 5 | Buf: 4/5\\
+{[}  840.8ms{]} {[}P3{]} Inseriu: 10 | Buf: 5/5\\
+{[} 1046.8ms{]} {[}P2{]} Cheio. Aguarda...\\
+{[} 1072.7ms{]} {[}C3{]} Retirou: 7 | Buf: 4/5\\
+{[} 1072.8ms{]} {[}P2{]} Inseriu: 12 | Buf: 5/5\\
+{[} 1745.4ms{]} {[}C2{]} Retirou: 12 | Buf: 0/5
+\end{multicols}
+\vspace{-0.3cm}
+\centering \footnotesize\normalfont\textit{=== Execução concluída: 12 itens produzidos e 12 consumidos ===}
 \end{quote}
 
-A análise da saída demonstra precisamente as seguintes propriedades:
-\begin{enumerate}
-    \item \textbf{Bloqueio em buffer cheio:} em 759,1\,ms e 1046,8\,ms, os produtores
-          encontraram o buffer cheio (5/5) e suspenderam sua execução corretamente
-          via variável de condição \texttt{nao\_cheio}.
-    \item \textbf{Retomada pontual:} logo que um consumidor liberou vaga
-          (em 840,7\,ms e 1072,7\,ms), o produtor suspenso acordou prontamente
-          e concluiu a inserção.
-    \item \textbf{Consumo integral e esvaziamento:} exatamente 12 itens foram
-          produzidos (3 produtores $\times$ 4 itens) e todos os 12 itens foram
-          consumidos (3 consumidores $\times$ 4 itens), resultando na ocupação final
-          de 0/5 no instante 1745,4\,ms.
-    \item \textbf{Sequência correta de encerramento:} a thread principal
-          aguardou o término de todos os produtores e em seguida de todos os
-          consumidores antes de invocar \texttt{logger\_shutdown()}, garantindo
-          que nenhum registro de log fosse perdido ou truncado.
+\noindent
+\textbf{Comprovações experimentais:}
+\begin{enumerate}\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}
+    \item \textbf{Bloqueio em buffer cheio:} Em 759,1\,ms e 1046,8\,ms, os produtores detectaram ocupação máxima ($5/5$) e bloquearam em \texttt{nao\_cheio}, impedindo qualquer transbordamento de dados.
+    \item \textbf{Retomada imediata:} Assim que um consumidor liberou vaga (em 840,7\,ms e 1072,7\,ms), o produtor suspenso acordou prontamente e efetuou a inserção com sucesso.
+    \item \textbf{Integridade e término limpo:} Todos os 12 itens foram consumidos sem perda ou duplicação. O buffer encerrou vazio ($0/5$), e a aplicação finalizou sem \textit{deadlock} ou vazamento de recursos.
 \end{enumerate}
 
-% ===========================
-%  4. CONCLUSAO
-% ===========================
+% ===========================================================
 \section{Conclusão}
-\label{sec:conclusao}
+% ===========================================================
 
-Este trabalho, em sua Versão 2.0, expandiu a solução original do Problema
-Produtor-Consumidor em duas dimensões fundamentais: a \textbf{refatoração
-modular} do código e a \textbf{adição de semáforos POSIX} como nova primitiva
-de sincronização.
-
-A refatoração separou claramente as responsabilidades em módulos independentes
-(\texttt{buffer}, \texttt{logger}, \texttt{produtor}, \texttt{consumidor},
-\texttt{main}), facilitando a manutenção, o teste e a compreensão do sistema.
-O Makefile automatiza a compilação de todos os módulos.
-
-O logger assíncrono demonstrou a aplicação prática de \textbf{semáforos POSIX}
-(\texttt{sem\_t}) como alternativa às variáveis de condição: enquanto o buffer
-principal emprega o par mutex e condição, a fila de log combina os semáforos
-\texttt{sem\_espacos\_log} e \texttt{sem\_itens\_log} com o lock \texttt{mutex\_log}.
-O uso de \texttt{sem\_trywait} garantiu que as threads do sistema principal nunca
-bloqueiem aguardando o logger.
-
-Como lições aprendidas, destacam-se:
-
-\begin{itemize}
-    \item O uso do laço \texttt{while} ao invés de \texttt{if} ao aguardar
-          uma variável de condição é indispensável para robustez frente a
-          \textit{spurious wakeups}.
-    \item O padrão \textit{lock~→~verificar~→~operar~→~sinalizar~→~unlock}
-          deve ser aplicado de forma consistente para evitar janelas de
-          vulnerabilidade.
-    \item Semáforos POSIX são especialmente adequados para padrões
-          produtor-consumidor simples, pois encapsulam diretamente o contador
-          de itens e espaços sem a necessidade de um mutex separado para a
-          condição.
-    \item A combinação de múltiplas primitivas (mutex, variáveis de condição
-          e semáforos) em um mesmo sistema requer atenção à ordem de
-          encerramento para evitar deadlocks.
-\end{itemize}
-
-Como trabalhos futuros, sugere-se explorar o problema dos \textit{Leitores-Escritores}
-e o \textit{Jantar dos Filósofos} com as mesmas primitivas, bem como a comparação
-de desempenho entre mutex+condição e semáforos POSIX em cenários de alta contention.
-
-% ===========================
-%  REFERENCIAS
-% ===========================
-\newpage
-\renewcommand{\refname}{Referências}
-\begin{thebibliography}{9}
-
-\bibitem{tanenbaum}
-TANENBAUM, A. S.; BOS, H.
-\textbf{Modern Operating Systems}.
-4.~ed. Upper Saddle River: Pearson, 2015.
-
-\bibitem{silberschatz}
-SILBERSCHATZ, A.; GALVIN, P. B.; GAGNE, G.
-\textbf{Operating System Concepts}.
-10.~ed. Hoboken: Wiley, 2018.
-
-\bibitem{kerrisk}
-KERRISK, M.
-\textbf{The Linux Programming Interface}.
-San Francisco: No Starch Press, 2010.
-
-\bibitem{dijkstra}
-DIJKSTRA, E. W.
-Cooperating Sequential Processes.
-In: \textit{Programming Languages}, F. Genuys (ed.),
-Academic Press, New York, 1968, pp.~43--112.
-
-\bibitem{buttazzo}
-BUTTAZZO, G. C.
-\textbf{Hard Real-Time Computing Systems}.
-3.~ed. New York: Springer, 2011.
-
-\bibitem{pthread_man}
-THE OPEN GROUP.
-\textbf{POSIX.1-2017 -- pthread.h}.
-Disponível em: \url{https://pubs.opengroup.org/onlinepubs/9699919799/}.
-Acesso em: nov.~2026.
-
-\end{thebibliography}
-
-% ===========================
-%  APENDICE: Codigo-Fonte
-% ===========================
-\newpage
-\appendix
-\section{Código-Fonte dos Módulos Principais}
-
-\subsection*{config.h}
-
-{\ttfamily\small\renewcommand{\baselinestretch}{1.1}\normalsize
-\noindent
-\#ifndef CONFIG\_H\\
-\#define CONFIG\_H\\[4pt]
-\#define TAMANHO\_BUFFER\ \ \ 5\\
-\#define NUM\_PRODUTORES\ \ \ 3\\
-\#define NUM\_CONSUMIDORES\ 3\\
-\#define ITENS\_POR\_THREAD\ 4\\
-\#define TAMANHO\_FILA\_LOG\ 20\\[4pt]
-\#endif
-}
-
-\subsection*{buffer.h}
-
-{\ttfamily\small\renewcommand{\baselinestretch}{1.1}\normalsize
-\noindent
-\#ifndef BUFFER\_H\\
-\#define BUFFER\_H\\[4pt]
-\#include $<$pthread.h$>$\\
-\#include "config.h"\\[4pt]
-typedef struct \{\\
-\hspace*{1em}int dados[TAMANHO\_BUFFER];\\
-\hspace*{1em}int cabeca, cauda, quantidade;\\
-\hspace*{1em}int proximo\_valor;\\
-\} Buffer;\\[4pt]
-extern Buffer buffer\_compartilhado;\\
-extern pthread\_mutex\_t mutex\_buffer;\\
-extern pthread\_cond\_t\ \ nao\_cheio;\\
-extern pthread\_cond\_t\ \ nao\_vazio;\\[4pt]
-void buffer\_init(void);\\
-void buffer\_destroy(void);\\
-int\ \ buffer\_inserir(int id\_thread);\\
-int\ \ buffer\_retirar(int id\_thread);\\[4pt]
-\#endif
-}
-
-\subsection*{logger.h}
-
-{\ttfamily\small\renewcommand{\baselinestretch}{1.1}\normalsize
-\noindent
-\#ifndef LOGGER\_H\\
-\#define LOGGER\_H\\[4pt]
-typedef enum \{\\
-\hspace*{1em}LOG\_PRODUZIU, LOG\_CONSUMIU,\\
-\hspace*{1em}LOG\_BUF\_CHEIO, LOG\_BUF\_VAZIO,\\
-\hspace*{1em}LOG\_SHUTDOWN\\
-\} TipoEvento;\\[4pt]
-typedef struct \{\\
-\hspace*{1em}TipoEvento tipo;\\
-\hspace*{1em}int\ \ thread\_id;\\
-\hspace*{1em}int\ \ valor;\\
-\hspace*{1em}int\ \ quantidade\_no\_buffer;\\
-\hspace*{1em}double timestamp\_ms;\\
-\} EventoLog;\\[4pt]
-void logger\_init(void);\\
-void logger\_iniciar\_thread(void);\\
-void log\_evento(TipoEvento, int, int, int);\\
-void logger\_shutdown(void);\\
-void logger\_destroy(void);\\[4pt]
-\#endif
-}
-
-\subsection*{logger.c (trechos principais)}
-
-{\ttfamily\small\renewcommand{\baselinestretch}{1.1}\normalsize
-\noindent
-/* Semaforos POSIX */\\
-static sem\_t sem\_espacos\_log;\ /* espacos livres */\\
-static sem\_t sem\_itens\_log;\ \ \ /* itens pendentes */\\
-static pthread\_mutex\_t mutex\_log = PTHREAD\_MUTEX\_INITIALIZER;\\[4pt]
-void logger\_init(void) \{\\
-\hspace*{1em}clock\_gettime(CLOCK\_MONOTONIC, \&tempo\_inicio);\\
-\hspace*{1em}sem\_init(\&sem\_espacos\_log, 0, TAMANHO\_FILA\_LOG);\\
-\hspace*{1em}sem\_init(\&sem\_itens\_log,\ \ 0, 0);\\
-\}\\[4pt]
-void log\_evento(TipoEvento tipo, int id, int val, int qtd) \{\\
-\hspace*{1em}if (sem\_trywait(\&sem\_espacos\_log) != 0) return; /* descarta */\\
-\hspace*{1em}EventoLog ev = \{tipo, id, val, qtd, ms\_desde\_inicio()\};\\
-\hspace*{1em}pthread\_mutex\_lock(\&mutex\_log);\\
-\hspace*{1em}fila\_log[cauda\_log] = ev;\\
-\hspace*{1em}cauda\_log = (cauda\_log + 1) \% TAMANHO\_FILA\_LOG;\\
-\hspace*{1em}pthread\_mutex\_unlock(\&mutex\_log);\\
-\hspace*{1em}sem\_post(\&sem\_itens\_log);\\
-\}\\[4pt]
-static void *thread\_log\_func(void *arg) \{\\
-\hspace*{1em}while (1) \{\\
-\hspace*{2em}sem\_wait(\&sem\_itens\_log);\\
-\hspace*{2em}pthread\_mutex\_lock(\&mutex\_log);\\
-\hspace*{2em}EventoLog ev = fila\_log[cabeca\_log];\\
-\hspace*{2em}cabeca\_log = (cabeca\_log + 1) \% TAMANHO\_FILA\_LOG;\\
-\hspace*{2em}pthread\_mutex\_unlock(\&mutex\_log);\\
-\hspace*{2em}sem\_post(\&sem\_espacos\_log);\\
-\hspace*{2em}if (ev.tipo == LOG\_SHUTDOWN) break;\\
-\hspace*{2em}/* exibe o evento com timestamp */\\
-\hspace*{1em}\}\\
-\hspace*{1em}return NULL;\\
-\}
-}
-
-\subsection*{main.c (estrutura de terminação)}
-
-{\ttfamily\small\renewcommand{\baselinestretch}{1.1}\normalsize
-\noindent
-int main(void) \{\\
-\hspace*{1em}buffer\_init();\ logger\_init();\ logger\_iniciar\_thread();\\[4pt]
-\hspace*{1em}/* Cria consumidoras primeiro, depois produtoras */\\
-\hspace*{1em}for (i = 0; i $<$ NUM\_CONSUMIDORES; i++)\\
-\hspace*{2em}pthread\_create(\&tc[i], NULL, consumidor, \&idc[i]);\\
-\hspace*{1em}for (i = 0; i $<$ NUM\_PRODUTORES; i++)\\
-\hspace*{2em}pthread\_create(\&tp[i], NULL, produtor, \&idp[i]);\\[4pt]
-\hspace*{1em}/* Join produtores primeiro */\\
-\hspace*{1em}for (i = 0; i $<$ NUM\_PRODUTORES; i++)\\
-\hspace*{2em}pthread\_join(tp[i], NULL);\\[4pt]
-\hspace*{1em}/* Join consumidores (garante consumo completo do buffer) */\\
-\hspace*{1em}for (i = 0; i $<$ NUM\_CONSUMIDORES; i++)\\
-\hspace*{2em}pthread\_join(tc[i], NULL);\\[4pt]
-\hspace*{1em}/* Encerra o logger (flush da fila apos todo processamento) */\\
-\hspace*{1em}logger\_shutdown();\\[4pt]
-\hspace*{1em}buffer\_destroy();\ logger\_destroy();\\
-\hspace*{1em}return 0;\\
-\}
-}
+A implementação atendeu a todas as especificações do trabalho de forma simples, objetiva e eficaz. O uso coordenado de \texttt{pthread\_mutex\_t} e \texttt{pthread\_cond\_t} eliminou por completo as condições de corrida no acesso à memória compartilhada do buffer circular. Paralelamente, o emprego de semáforos POSIX (\texttt{sem\_t}) no logger assíncrono demonstrou como primitivas distintas podem ser combinadas harmoniosamente em uma arquitetura concorrente de alto desempenho e confiabilidade.
 
 \end{document}
