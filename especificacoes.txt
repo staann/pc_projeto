@@ -1,0 +1,17 @@
+Programação Concorrente - Trabalho 1
+Sincronização entre Processos
+
+
+O presente projeto tem como objetivo o desenvolvimento de algoritmos para
+tratar problemas de comunicação entre processos atraves de uma memoria
+compartilhada
+
+
+Cada aluno devera elaborar um problema de comunicacao entre processos
+atrav´es de memoria compartilhada que envolva condicoes de corrida. O aluno
+entao devera elaborar um algoritmo que solucione este problema utilizando
+os mecanismos de sincronizacao entre processos estudados em aula (locks,
+variaveis condicao, semaforos, etc.). Todas as implementacoes deverao utilizar a biblioteca POSIX Pthreads.
+
+
+Elabore oque foi pedido de maneira simples e eficaz.
